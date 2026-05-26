@@ -123,6 +123,15 @@ function tally(answers) {
   return score;
 }
 
+// 每个维度在整个题库里作为选项出现的总次数 = 该维度的理论最大值
+// (配平后每维应为 5,这里从 QUIZ 实际统计,避免硬编码出错)
+const DIM_MAX = (() => {
+  const m = {};
+  DIM_ORDER.forEach((k) => (m[k] = 0));
+  QUIZ.forEach((item) => item.opts.forEach((o) => o.d.forEach((dim) => { m[dim] = (m[dim] || 0) + 1; })));
+  return m;
+})();
+
 const gold = "#c9a227";
 
 export default function App() {
@@ -230,13 +239,15 @@ function Quiz({ qi, onSubmit, onBack, isLast, canBack, initial }) {
 }
 
 function Result({ score, onRestart }) {
-  // 雷达双层:firstV=只看第一反应(本能),totalV=第一反应+其余(广度)
+  // 雷达双层,按每维"实际出现总题数"归一化(真实数据,全选则撑满=如实反映)
   const radar = DIM_ORDER.map((k) => {
     const s = score[k];
+    const maxN = DIM_MAX[k] || 1;
+    const total = s.first + s.also;
     return {
-      key: k, name: DIMS[k], first: s.first, also: s.also,
-      firstV: Math.min(s.first / 3, 1),          // 第一反应,3次封顶
-      totalV: Math.min((s.first + s.also) / 4, 1) // 总量,4次封顶
+      key: k, name: DIMS[k], first: s.first, also: s.also, maxN, total,
+      firstV: s.first / maxN,   // 第一反应占比(分母=该维真实出现次数)
+      totalV: total / maxN,     // 总量占比
     };
   });
   const rows = [...radar].sort((a, b) => (b.first * 2 + b.also) - (a.first * 2 + a.also));
@@ -254,20 +265,22 @@ function Result({ score, onRestart }) {
 
       <div style={S.list}>
         {rows.map((f, i) => {
-          const total = f.first + f.also;
           return (
             <div key={f.key} className="row" style={{ animationDelay: `${i * 50}ms` }}>
               <div style={S.rowHead}>
-                <span style={S.fname}>{f.name}</span>
+                <span style={S.fname}>
+                  {f.name}
+                  <span style={S.maxTag}>{f.total}/{f.maxN}</span>
+                </span>
                 <span style={S.count}>
                   {f.first > 0 && <b style={{ color: gold }}>第一反应 ×{f.first}　</b>}
                   {f.also > 0 && <span style={{ color: "#8a8170" }}>其余 ×{f.also}</span>}
-                  {total === 0 && <span style={{ color: "#5a5347" }}>本次未出现</span>}
+                  {f.total === 0 && <span style={{ color: "#5a5347" }}>本次未出现</span>}
                 </span>
               </div>
               <div style={S.bar}>
-                <div style={{ ...S.fillFirst, width: `${Math.min(f.first / 3, 1) * 100}%` }} />
-                <div style={{ ...S.fillAlso, width: `${Math.min(f.also / 4, 1) * 100}%` }} />
+                <div style={{ ...S.fillFirst, width: `${(f.first / f.maxN) * 100}%` }} />
+                <div style={{ ...S.fillAlso, width: `${(f.also / f.maxN) * 100}%` }} />
               </div>
             </div>
           );
@@ -357,6 +370,7 @@ const S = {
   list: { display: "flex", flexDirection: "column", gap: 18 },
   rowHead: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8, flexWrap: "wrap", gap: 4 },
   fname: { fontSize: 17, color: "#f3eede", fontWeight: 600 },
+  maxTag: { fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: "#5a5347", marginLeft: 10, fontWeight: 400 },
   count: { fontFamily: "'JetBrains Mono', monospace", fontSize: 12 },
   bar: { display: "flex", height: 10, background: "#161410", borderRadius: 5, overflow: "hidden", border: "1px solid #221f19" },
   fillFirst: { background: gold, height: "100%" },
